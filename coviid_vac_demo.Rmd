@@ -1,0 +1,559 @@
+---
+title: "covid-p"
+author: "Sara"
+date: "11/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(forecast)
+library(tidyverse)
+library(kableExtra)
+library(here)
+library(plyr)
+library(dplyr)
+library(fastDummies)
+library(caTools)
+library(gains)
+library(caret)
+library(MASS)
+library(FNN)
+```
+
+
+
+```{r}
+t.covid.df <- read.csv("total.csv", header = TRUE)
+head(t.covid.df)
+```
+
+# loading libararies and dataset
+
+```{r}
+dim(t.covid.df)
+```
+
+```{r}
+str(t.covid.df )
+```
+
+```{r}
+summary(t.covid.df)
+```
+
+```{r}
+newdata <- t.covid.df
+newdata.df <- mutate_if(newdata, is.character, as.factor)
+str(newdata.df)
+```
+
+
+```{r}
+summary(newdata.df)
+```
+# looking into variables and its structure
+```{r}
+table(newdata.df$death_yn, newdata.df$medcond_yn)
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$icu_yn)
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$hosp_yn)
+```
+
+#lokking into regressors by outcome variable and revaluing catagories of regressors 
+
+```{r}
+
+newdata.df$hosp_yn <- revalue (newdata.df$hosp_yn, c ( "Missing" = "No", "Unknown" = "No"))
+summary(newdata.df$hosp_yn)
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$hosp_yn)
+```
+
+
+```{r}
+table(newdata.df$death_yn, newdata.df$current_status)
+
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$age_group)
+ggplot(data = newdata.df) +
+  geom_bar(mapping = aes(x = age_group))
+```
+
+```{r}
+newdata.df$Age <- revalue(newdata.df$age_group, c("0 - 9 Years"="19 & Below","10 - 19 Years"= "19 & Below", "20 - 29 Years"= "20 - 39 Years", "30 - 39 Years"= "20 - 39 Years", "Unknown"= "20 - 39 Years" ,"40 - 49 Years"= "40 - 59 Years", "50 - 59 Years"= "40 - 59 Years", "60 - 69 Years"= "60 -79","70 - 79 Years"= "60 -79", "80+ Years"= "80+ Years" ))
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$Age)
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$Race.and.ethnicity..combined.)
+```
+
+
+
+```{r}
+newdata.df$Ethnicity <- revalue(newdata.df$Race.and.ethnicity..combined., c("Hispanic/Latino" = "Hispanic" , "American Indian/Alaska Native, Non-Hispanic" = "Non-Hispanic", "Black, Non-Hispanic" = "Non-Hispanic", "Multiple/Other, Non-Hispanic" = "Non-Hispanic", "Asian, Non-Hispanic" = "Non-Hispanic", "Native Hawaiian/Other Pacific Islander, Non-Hispanic" = "Non-Hispanic", "White, Non-Hispanic" = "Non-Hispanic" , "Unknown" = "Non-Hispanic" ))
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$Ethnicity)
+```
+
+```{r}
+newdata.df$Race <- revalue(newdata$Race.and.ethnicity..combined., c("Hispanic/Latino" = "Others" , "American Indian/Alaska Native, Non-Hispanic" = "Asian", "Black, Non-Hispanic" = "Black", "Multiple/Other, Non-Hispanic" = "Others", "Asian, Non-Hispanic" = "Asian", "Native Hawaiian/Other Pacific Islander, Non-Hispanic" = "Others", "White, Non-Hispanic" = "White", "Unknown" = "Others"))
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$Race)
+
+```
+
+```{r}
+newdata.df$Race2 <- revalue(newdata.df$Race, c("Asian" = "White/Black/Asian" , "Black" = "White/Black/Asian", "White" = "White/Black/Asian", "Others"= "Others"))
+
+
+newdata.df$Race2  <- ifelse(newdata.df$Race  == "Others", 1, 0)
+table(newdata.df$death_yn, newdata.df$Race2)
+
+```
+
+
+```{r}
+table(newdata.df$death_yn, newdata.df$sex)
+```
+
+```{r}
+newdata.df$Gender<- revalue(newdata$sex, c("Missing"= "Female", "Unknown" = "Female"))
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$Gender)
+```
+
+
+```{r}
+newdata.df$Month<-months(as.Date(newdata.df$cdc_report_dt))
+newdata.df$Weekday<-weekdays(as.Date(newdata.df$cdc_report_dt))
+```
+
+```{r}
+table(newdata.df$death_yn, newdata.df$Month)
+```
+
+```{r}
+table(newdata.df$Month)
+```
+
+
+```{r}
+ggplot(data = newdata.df) +
+  geom_bar(mapping = aes(x = Age),  fill="pink", color="purple")
+ggplot(data = newdata.df) +
+  geom_bar(mapping = aes(x = Gender), fill="Blue", color="purple" )
+ggplot(data = newdata.df) +
+  geom_bar(mapping = aes(x = Race), fill="pink", color="pink" )
+ggplot(data = newdata.df) +
+  geom_bar(mapping = aes(x = Ethnicity), fill="red", color="purple")
+ggplot(data = newdata.df) +
+  geom_bar(mapping = aes(x = Month),  fill="purple", color="purple")
+```
+
+```{r}
+newdata.df$Months<- revalue(newdata.df$Month, c("February"= "February-March", "March" = "February-March"))
+table(newdata.df$death_yn, newdata.df$Months)
+```
+
+
+```{r}
+newdata.df$onset_dt <- ifelse(newdata.df$onset_dt == "", 0, 1)
+table(newdata.df$death_yn, newdata.df$onset_dt)
+```
+
+
+
+```{r}
+summary(newdata.df)
+```
+
+```{r}
+table(newdata.df$Ethnicity)
+```
+
+```{r}
+levels(newdata.df$Ethnicity)
+```
+```{r}
+ggplot(newdata.df, aes(y = death_yn, x = current_status, colour= Ethnicity)) +
+geom_point(alpha = 0.6)
+ggplot(newdata.df, aes(y = death_yn, x = current_status, colour= Gender)) +
+geom_point(alpha = 0.6)
+
+```
+
+
+```{r}
+newdata2.df <- newdata.df
+newdata2.df$Gender <- ifelse(newdata2.df$Gender == "Female", 1, 0)
+newdata2.df$hosp_yn <- ifelse(newdata2.df$hosp_yn == "No", 1, 0)
+newdata2.df$current_status<- ifelse(newdata2.df$current_status == "Laboratory-confirmed case", 1, 0)
+newdata2.df$death_yn<- ifelse(newdata2.df$death_yn == "Yes", 1, 0)
+newdata2.df$Ethnicity<- ifelse(newdata2.df$Ethnicity == "Non-Hispanic", 1, 0)
+head(newdata2.df)
+```
+
+
+
+```{r}
+newdata2.df$AGE1 <- as.factor(revalue(newdata2.df$Age, c("19 & Below"= "0","20 - 39 Years"="0", "40 - 59 Years"= "0", "60 -79"="1",  "80+ Years" ="1")))
+levels(newdata2.df$AGE1)
+```
+
+
+
+```{r}
+
+table(newdata2.df$AGE1)
+
+```
+
+
+```{r}
+table(newdata2.df$Ethnicity)
+```
+
+```{r}
+names(newdata2.df)
+```
+
+```{r}
+data_d.df <- newdata2.df[c(1,4,5,9,11,13:17,20:21)]
+str(data_d.df)
+```
+
+```{r}
+data_d.df<- mutate_if(data_d.df, is.character, as.factor)
+```
+
+```{r}
+library(fastDummies)
+results <- fastDummies::dummy_cols(data_d.df, select_columns = c( 'Age', 'Race'))
+```
+
+```{r}
+head(results)
+```
+```{r}
+t(t(names(results)))
+```
+
+#Transformed variables and created dummies 
+
+```{r}
+finaldata.df<- results [c(1:5,7,9:12,14:17, 19:21)]
+dim(finaldata.df)
+names(finaldata.df)
+```
+
+#Created newdataset of transformed variables
+
+```{r}
+finaldata.df<- mutate_if(finaldata.df, is.numeric, as.integer)
+finaldata.df<- mutate_if(finaldata.df, is.factor, as.integer)
+str(finaldata.df)
+```
+```{r}
+colnames(finaldata.df)[11] <- c("Age_20to39Years")
+colnames(finaldata.df)[12] <- c("Age_40to59Years")
+colnames(finaldata.df)[13] <- c("Age_60to79Years")
+colnames(finaldata.df)[14] <- c("Age_80plus")
+```
+
+
+```{r}
+str(finaldata.df)
+```
+
+```{r}
+set.seed(1)
+train.rows <- sample(rownames(finaldata.df), dim(finaldata.df)[1]*0.6)
+train.data <- finaldata.df[train.rows, ]
+```
+
+```{r}
+str(train.data)
+```
+
+
+```{r}
+dim(train.data)
+```
+
+```{r}
+valid.rows <- setdiff(rownames(finaldata.df), train.rows)
+valid.data <- finaldata.df[valid.rows, ]
+head(valid.data)
+dim(valid.data)
+```
+```{r}
+t(t(names(train.data)))
+```
+ # partitioned Dataset into test and train 
+
+```{r}
+logitMod <- glm(death_yn ~ onset_dt+current_status+Gender+hosp_yn+Ethnicity+Age_20to39Years+Age_40to59Years+Age_60to79Years+Age_80plus+Race_Black+Race_Others+Race_White, data=train.data, family=binomial)
+options(scipen = 999)
+summary(logitMod)
+```
+
+```{r}
+logitMod.pred <- predict.glm(logitMod, valid.data , type = "response")
+opslm1 <- as.factor(ifelse(logitMod.pred>0.5, "1", "0"))
+
+confusionMatrix(as.factor(valid.data$death_yn), opslm1, positive = "1")
+```
+
+# Run logistc Model
+```{r}
+table(newdata2.df$Age, newdata$death_yn)
+```
+
+
+
+```{r}
+stepwise_logit_mod <- glm(death_yn ~ onset_dt+Gender+current_status+hosp_yn+Ethnicity+Race2+Race_Black+Race_Others+Race_White+ AGE1, data=train.data, family=binomial) %>% stepAIC(trace=TRUE)
+```
+
+
+```{r}
+summary(stepwise_logit_mod)
+```
+
+```{r}
+stepwise_logit_mod.pred <- predict.glm(stepwise_logit_mod, valid.data , type = "response")
+opslm <- as.factor(ifelse(stepwise_logit_mod.pred>0.5, "1", "0"))
+
+confusionMatrix(as.factor(valid.data$death_yn), opslm, positive = "1")
+hist(stepwise_logit_mod.pred)
+```
+
+# run Stepwise logistics model to finalize the model with right number of signicant regressors
+
+```{r}
+ba <- c()
+sen <- c()
+spe <- c()
+co <- c()
+for (i in c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)){
+  op_i <- as.factor(ifelse(stepwise_logit_mod.pred>i, "1", "0"))
+  cm <- confusionMatrix(as.factor(valid.data$death_yn), op_i, positive = "1")
+  co <- c(co, i)
+  ba <- c(ba, cm$byClass[11])
+  sen <- c(sen, cm$byClass[1])
+  spe <- c(spe, cm$byClass[2])
+}
+```
+
+
+
+
+```{r}
+result.slm.df <- data.frame(co, ba, sen, spe)
+result.slm.df
+```
+
+# created table ofscores of  validity tests of model
+```{r}
+write.csv(result.slm.df , "results.slm.csv")
+```
+
+
+
+```{r}
+opslm.h <- as.factor(ifelse(stepwise_logit_mod.pred>0.7, "1", "0"))
+confusionMatrix(as.factor(valid.data$death_yn), opslm.h, positive = "1")
+```
+
+```{r}
+opslm.h <- as.factor(ifelse(stepwise_logit_mod.pred>0.7, "1", "0"))
+confusionMatrix(as.factor(valid.data$death_yn), opslm.h, positive = "1")
+```
+
+
+```{r}
+data.frame(coeff = stepwise_logit_mod$coefficients, odds = exp(stepwise_logit_mod$coefficients))
+```
+
+```{r}
+paste("P(Not Survived)= 1/1+e^-(-2.272 -1.323(onset_dt)-0.397(Gender)-1.207(current_status)-2.453(hosp_yn) -0.732(Ethnicity)-0.759(Race)+ 2.772 (AGE1)")
+```
+
+
+```{r}
+logitMod.3 <- glm(death_yn ~ onset_dt+current_status+hosp_yn+Ethnicity+Race_Black+Race_Others+Race_White+ AGE1, data=train.data, family=binomial)
+options(scipen = 999)
+summary(logitMod.3)
+```
+
+
+
+```{r}
+logitMod.3.pred <- predict.glm(logitMod.3, valid.data , type = "response")
+op3 <- as.factor(ifelse(logitMod.3.pred>0.5, "1", "0"))
+
+confusionMatrix(as.factor(valid.data$death_yn), op3, positive = "1")
+hist(logitMod.3.pred)
+```
+
+```{r}
+op3.l <- as.factor(ifelse(logitMod.3.pred>0.3, "1", "0"))
+confusionMatrix(as.factor(valid.data$death_yn), op3.l, positive = "1")
+```
+
+```{r}
+op3.h <- as.factor(ifelse(logitMod.3.pred>0.7, "1", "0"))
+confusionMatrix(as.factor(valid.data$death_yn), op3.h, positive = "1")
+```
+
+
+
+```{r}
+data.frame(coeff = logitMod.3$coefficients, odds = exp(logitMod.3$coefficients))
+```
+
+
+
+```{r}
+summary(logitMod.3, odds = exp(logitMod.3$coefficients))
+```
+
+```{r}
+ba <- c()
+sen <- c()
+spe <- c()
+co <- c()
+for (i in c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)){
+  op_i <- as.factor(ifelse(logitMod.3.pred>i, "1", "0"))
+  cm <- confusionMatrix(as.factor(valid.data$death_yn), op_i, positive = "1")
+  co <- c(co, i)
+  ba <- c(ba, cm$byClass[11])
+  sen <- c(sen, cm$byClass[1])
+  spe <- c(spe, cm$byClass[2])
+}
+```
+
+```{r}
+result_df <- data.frame(co, ba, sen, spe)
+```
+
+```{r}
+result_df
+```
+
+
+```{r}
+write.csv(result_df, "results.csv")
+```
+
+```{r}
+plot(result_df$ba, result_df$co, bty="l", lty=1)
+```
+
+```{r}
+gain <- gains(valid.data$death_yn, stepwise_logit_mod.pred, groups=length(stepwise_logit_mod.pred))
+# plot lift chart
+plot(c(0,gain$cume.pct.of.total*sum(valid.data$death_yn))~c(0,gain$cume.obs),
+xlab="# cases", ylab="Cumulative", main="", type="l")
+lines(c(0,sum(valid.data$death_yn))~c(0, dim(valid.data)[1]), lty=2)
+# compute deciles and plot decile-wise chart
+gain <- gains(valid.data$death_yn, stepwise_logit_mod.pred, groups=10)
+heights <- gain$mean.resp/mean(valid.data$death_yn)
+midpoints <- barplot(heights, names.arg = gain$depth, ylim = c(0,9),
+xlab = "Percentile", ylab = "Mean Response", main = "Decile-wise lift chart")
+# add labels to columns
+text(midpoints, heights+0.5, labels=round(heights, 1), cex = 0.8)
+```
+
+
+```{r}
+## A 3-nearest neighbours model with no normalization
+ba_nn <- c()
+sen_nn <- c()
+spe_nn <- c()
+k <- c()
+for (i in c(1, 2, 3, 4, 5, 6, 7, 8, 9)){
+  nn <- DMwR::kNN(death_yn ~ onset_dt+current_status+Gender+hosp_yn+Ethnicity+Race_Black+Race_Others+Race_White+ AGE2, train = train.data, test = valid.data, norm=TRUE,k=i)
+  cm <- confusionMatrix(as.factor(valid.data$death_yn), nn, positive = "1")
+  k <- c(k, i)
+  ba_nn <- c(ba_nn, cm$byClass[11])
+  sen_nn <- c(sen_nn, cm$byClass[1])
+  spe_nn <- c(spe_nn, cm$byClass[2])
+}
+```
+
+#validity test scores for multiple logistic models
+
+```{r}
+head(train.data, 1)
+```
+
+```{r}
+# 2, 3, 4, 5, 6, 7, 10,  16, 
+temp.train <- subset(train.data, select = c(2, 3, 4,5, 6, 7,9))
+temp.valid <- subset(valid.data, select = c(2, 3, 4, 5,6, 7, 9))
+```
+
+
+
+```{r}
+nn <- FNN::knn(train = temp.train, test = head(temp.valid, 1), cl = temp.train$death_yn, k = 3)
+```
+
+```{r}
+nn
+```
+
+```{r}
+head(temp.valid, 1)
+```
+
+```{r}
+as.integer(row.names(temp.train)[attr(nn, "nn.index")])
+```
+
+```{r}
+temp.train[c("466", "1104", "471"), ]
+```
+
+# used K-Nearest neighbour test where K=3 
+
+
+
+```{r}
+results_nn_df <- data.frame(k, ba_nn, sen_nn, spe_nn)
+results_nn_df
+```
+
+#validation score of K_NN model
+
+```{r}
+write.csv(results_nn_df, "results_nn.csv")
+```
+
+
+
+
