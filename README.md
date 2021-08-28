@@ -66,6 +66,7 @@ Patients with characteristics like, age above 60 years, gender male, ethnicity H
 
 Figure 2.1, 2.3, 2.4, and 2.4 Frequency Bar Charts
 
+![Figure 2.1](figurre2.1.png)
 Figure 3: All Predictors as per Outcome variable Classes
 
 Figure: 4; Dummies
